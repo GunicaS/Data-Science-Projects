@@ -1,0 +1,243 @@
+---
+title: "A Regression Analysis of Physician Distribution"
+author: "Gunica Sharma"
+date: "2025-07-30"
+output: html_document
+---
+
+```{r}
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.align = "center", fig.width = 10)
+options(scipen = 999)
+# Import data
+cdi2 <- read.csv("CDI2.csv", header = FALSE)
+
+# Update column names
+colnames(cdi2) <- c("X1","X2","X3","X4","Y","X5","X6","X7","X8","X9","X10")
+
+# Convert X10 (Geographical Region) to categorical variable
+cdi2$X10 <- as.factor(cdi2$X10)
+
+head(cdi2)
+library(dplyr)
+
+variable_names <- c("X1", "X2", "X3", "X4", "X5", "X6", "X7", "X8", "X9")
+
+#Loop through each variable and calculate statistics
+summary_stats <- lapply(variable_names, function(var) {
+  data <- cdi2[[var]] 
+  stats <- data.frame(
+    Variable = var,
+    Mean = mean(data, na.rm = TRUE),
+    Median = median(data, na.rm = TRUE),
+    Q1 = quantile(data, 0.25, na.rm = TRUE),
+    Q3 = quantile(data, 0.75, na.rm = TRUE),
+    Std_Dev = sd(data, na.rm = TRUE),
+    Min = min(data, na.rm = TRUE),
+    Max = max(data, na.rm = TRUE)
+  )
+  return(stats)
+})
+
+summary_stats_df <- do.call(rbind, summary_stats)
+rownames(summary_stats_df) <- NULL
+summary_stats_df
+#Part 2 Code for the scatterplots 
+library(ggplot2)
+variable_names <- c("X1", "X2", "X3", "X4", "X5", "X6", "X7", "X8", "X9")
+
+#Loop through each variable and create scatterplots
+for (var in variable_names) {
+  plots <- ggplot(cdi2, aes_string(x = var, y = "Y")) +  
+    geom_point() + 
+    geom_smooth(method = "lm", se = FALSE,) +
+    labs(title = paste(var, "vs Y"),
+      px = var,
+      y = "Number of Active Physicians")
+  print(plots)}
+library(leaps)
+all.models = regsubsets(Y ~., data = cdi2)
+
+names.of.data = names.of.data = c("Y","X1","X2","X3","X4","X5","X6","X7","X8","X9","X102","X103","X104") 
+some.stuff = summary(all.models)
+n= nrow(cdi2)
+K = nrow(some.stuff$which)
+nicer = lapply(1:K,function(i){
+  model = paste(names.of.data[some.stuff$which[i,]],collapse = ",")
+  p = sum(some.stuff$which[i,])
+  adjR2 = some.stuff$adjr2
+  BIC = some.stuff$bic[i]
+  CP = some.stuff$cp[i]
+  results = data.frame(model,p,adjR2, CP,BIC)
+  return(results)
+})
+nicer = Reduce(rbind,nicer)
+nicer
+full.model = lm(Y ~ ., data = cdi2)
+empty.model = lm(Y ~ 1, data = cdi2)
+
+n = nrow(cdi2)
+library(MASS)
+
+forward.model.AIC = stepAIC(empty.model, scope = list(lower = empty.model, upper= full.model), k = 2,direction = "forward",trace = FALSE)
+forward.model.BIC = stepAIC(empty.model,  scope = list(lower = empty.model, upper= full.model), k = log(n),trace=FALSE,direction = "forward")
+backward.model.AIC = stepAIC(full.model, scope = list(lower = empty.model, upper= full.model), k = 2,direction = "backward",trace = FALSE)
+backward.model.BIC = stepAIC(full.model,  scope = list(lower = empty.model, upper= full.model), k = log(n),trace=FALSE,direction = "backward")
+FB.model.AIC = stepAIC(empty.model, scope = list(lower = empty.model, upper= full.model), k = 2,direction = "both",trace = FALSE)
+FB.model.BIC = stepAIC(empty.model,  scope = list(lower = empty.model, upper= full.model), k = log(n),trace=FALSE,direction = "both")
+
+BF.model.AIC = stepAIC(full.model, scope = list(lower = empty.model, upper= full.model), k = 2,direction = "both",trace = FALSE)
+BF.model.BIC = stepAIC(full.model,  scope = list(lower = empty.model, upper= full.model), k = log(n),trace=FALSE,direction = "both")
+forward.model.AIC$coefficients
+backward.model.AIC$coefficients
+FB.model.AIC$coefficients
+BF.model.AIC$coefficients
+forward.model.BIC$coefficients
+backward.model.BIC$coefficients
+FB.model.BIC$coefficients
+BF.model.BIC$coefficients
+All.Criteria = function(the.model){
+  p = length(the.model$coefficients)
+  n = length(the.model$residuals)
+  the.BIC = BIC(the.model)
+  the.LL = logLik(the.model)
+  the.AIC = AIC(the.model)
+  the.PRESS = PRESS(the.model)
+  the.R2adj = summary(the.model)$adj.r.squared
+  the.results = c(the.LL,p,n,the.AIC,the.BIC,the.PRESS,the.R2adj)
+  names(the.results) = c("LL","p","n","AIC","BIC","PRESS","R2adj")
+  return(the.results)
+}
+
+library(MPV)
+
+AIC.model = lm(Y ~ X2 + X3 + X5 + X6 + X7 + X8 + X9 + X10, data = cdi2)
+BIC.model = lm(Y ~ X2 + X3 + X5 + X9 + X10, data = cdi2)
+
+round(All.Criteria(AIC.model),4)
+round(All.Criteria(BIC.model),4)
+final.model = lm(Y ~ X2 + X3 + X5 + X6 + X7 + X8 + X9 + X10, data = cdi2)
+
+# Normal Q-Q Plot
+qqnorm(final.model$residuals)
+qqline(final.model$residuals)
+# Shapiro-Wilks Test
+ei = final.model$residuals
+the.SWtest = shapiro.test(ei)
+the.SWtest
+library(ggplot2)
+
+# Define yhat
+cdi2$ei = final.model$residuals
+cdi2$yhat = final.model$fitted.values
+
+# Errors vs. fitted values
+qplot(yhat, ei, data = cdi2) +  ggtitle("Errors vs. Fitted Values") + xlab("Fitted Values") + ylab("Errors") + geom_hline(yintercept = 0,col = "purple")
+# Fligner Killeen test (FK Test)
+cdi2$ei = final.model$residuals #If you have not done this already, do this now.
+Group = rep("Lower",nrow(cdi2)) #Creates a vector that repeats "Lower" n times
+Group[cdi2$Y < median(cdi2$Y)] = "Upper" #Changing the appropriate values to "Upper"
+Group = as.factor(Group) #Changes it to a factor, which R recognizes as a grouping variable.
+cdi2$Group = Group
+the.FKtest= fligner.test(cdi2$ei, cdi2$Group)
+the.FKtest
+# Find outliers
+residuals <- rstandard(final.model)  # Standardized residuals
+
+# Identify potential outliers (threshold: ±2)
+outliers <- which(abs(residuals) > 2)
+outliers
+
+length(outliers) # 27 outliers
+# Calculate leverage (hat) values
+leverage <- hatvalues(final.model)
+
+# Threshold: 2(p+1)/n
+p <- length(coef(final.model)) - 1  # Number of predictors
+n <- nrow(cdi2)  # Number of observations
+leverage_threshold <- 2 * (p ) / n # some other may use 2(p+1)/n
+
+# Identify high leverage points
+high_leverage_points <- which(leverage > leverage_threshold)
+high_leverage_points
+length(high_leverage_points)
+# Plot leverage
+plot(leverage, type = "h", main = "Leverage Values", xlab = "Index", ylab = "Leverage")
+abline(h = leverage_threshold, col = "red", lty = 2)
+# Calculate Cook's Distance
+cooks_d <- cooks.distance(full.model)
+
+# Threshold: 4/n
+cooks_threshold <- 2*p / n # 2p/n
+
+# Identify influential points
+influential_points <- which(cooks_d > cooks_threshold)
+influential_points
+length(influential_points)
+# Plot Cook's Distance
+plot(cooks_d, type = "h", main = "Cook's Distance", xlab = "Index", ylab = "Cook's Distance")
+abline(h = cooks_threshold, col = "red", lty = 2)
+# Combine indices of outliers, high leverage points, and influential points for removal
+remove_out_lev_inf <- c(outliers, high_leverage_points, influential_points)
+
+# Remove duplicate indices
+remove_out_lev_inf <- unique(remove_out_lev_inf)
+
+remove_out_lev_inf
+
+length(remove_out_lev_inf)
+# Remove outliers, high leverage points, influential points
+cdi2_clean = cdi2[-remove_out_lev_inf,]
+write.csv(cdi2_clean, "cdi2_clean.csv", row.names = FALSE)
+
+# Confirm outliers removed
+dim(cdi2_clean)
+# Fit final linear regression model without outliers
+clean.model = lm(Y ~ X2 + X3 + X5 + X6 + X7 + X8 + X9 + X10, data = cdi2_clean)
+
+# Normal Q-Q Plot
+qqnorm(clean.model$residuals)
+qqline(clean.model$residuals)
+# Shapiro-Wilks Test
+ei = clean.model$residuals
+the.SWtest = shapiro.test(ei)
+the.SWtest
+# Define yhat
+cdi2_clean$ei = clean.model$residuals
+cdi2_clean$yhat = clean.model$fitted.values
+
+# Errors vs. fitted values
+qplot(yhat, ei, data = cdi2_clean) +  ggtitle("Errors vs. Fitted Values") + xlab("Fitted Values") + ylab("Errors") + geom_hline(yintercept = 0,col = "purple")
+# Fligner Killeen test (FK Test)
+cdi2_clean$ei = clean.model$residuals #If you have not done this already, do this now.
+Group = rep("Lower",nrow(cdi2_clean)) #Creates a vector that repeats "Lower" n times
+Group[cdi2_clean$Y < median(cdi2_clean$Y)] = "Upper" #Changing the appropriate values to "Upper"
+Group = as.factor(Group) #Changes it to a factor, which R recognizes as a grouping variable.
+cdi2_clean$Group = Group
+the.FKtest= fligner.test(cdi2_clean$ei, cdi2_clean$Group)
+the.FKtest
+summary(clean.model)
+# Confidence Interval
+
+conf_intervals <- confint(clean.model, level = 0.95)
+print(conf_intervals)
+
+coefficients_table <- summary(clean.model)$coefficients
+print(coefficients_table)
+
+r_squared <- summary(clean.model)$r.squared
+
+results_table <- data.frame(
+  Coefficient = rownames(coefficients_table),
+  Estimate = coefficients_table[, "Estimate"],
+  Std_Error = coefficients_table[, "Std. Error"],
+  t_value = coefficients_table[, "t value"],
+  p_value = coefficients_table[, "Pr(>|t|)"],
+  Lower_CI = conf_intervals[, 1],
+  Upper_CI = conf_intervals[, 2])
+
+print(results_table)
+
+
+
+```
