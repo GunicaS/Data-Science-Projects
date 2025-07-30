@@ -1,0 +1,186 @@
+---
+title: "STA 108 Project"
+author: "Gunica Sharma"
+date: "2024-10-25"
+output: html_document
+---
+
+```{r, echo = FALSE,warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.align = "center", fig.width = 10)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+
+cdi_data <- read.csv("C:/Users/vs24/Downloads/CDI.csv")
+```
+
+```{r}
+# Histogram of Income by Region
+ggplot(cdi_data, aes(x = income, fill = region)) +
+  geom_histogram(binwidth = 2000, alpha = 0.6, position = "identity") +
+  facet_wrap(~region) +
+  labs(title = "Income Distribution by Region", x = "Income", y = "Count") +
+  theme_minimal()
+
+# Histogram of Degree by Region
+ggplot(cdi_data, aes(x = degree, fill = region)) +
+  geom_histogram(binwidth = 2, alpha = 0.6, position = "identity") +
+  facet_wrap(~region) +
+  labs(title = "Degree Percentage Distribution by Region", x = "Degree Percentage", y = "Count") +
+  theme_minimal()
+
+```
+
+```{r}
+# Boxplot of Income by Region
+ggplot(cdi_data, aes(x = region, y = income, fill = region)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Income by Region", x = "Region", y = "Income") +
+  theme_minimal()
+
+# Boxplot of Degree Percentage by Region
+ggplot(cdi_data, aes(x = region, y = degree, fill = region)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Degree Percentage by Region", x = "Region", y = "Degree Percentage") +
+  theme_minimal()
+
+```
+
+```{r}
+# Summary statistics by region
+cdi_summary <- cdi_data %>%
+  group_by(region) %>%
+  summarise(
+    Mean_Income = mean(income),
+    SD_Income = sd(income),
+    Mean_Degree = mean(degree),
+    SD_Degree = sd(degree)
+  )
+print(cdi_summary)
+
+# Correlation between Income and Degree by Region
+correlation_by_region <- cdi_data %>%
+  group_by(region) %>%
+  summarise(
+    Correlation = cor(income, degree))
+print(correlation_by_region)
+
+```
+
+```{r}
+
+# Scatter Plot of Income vs. Degree for All Regions
+ggplot(cdi_data, aes(x = degree, y = income, color = region)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Scatter Plot of Income vs. Degree (All Regions)", x = "Degree Percentage", y = "Income") 
+
+```
+
+```{r}
+# Linear models for each region
+model_NE <- lm(income ~ degree, data = cdi_data, subset = region == "NE")
+model_NC <- lm(income ~ degree, data = cdi_data, subset = region == "NC")
+model_S  <- lm(income ~ degree, data = cdi_data, subset = region == "S")
+model_W  <- lm(income ~ degree, data = cdi_data, subset = region == "W")
+
+```
+
+
+```{r}
+
+# North East Region
+ggplot(cdi_data %>% filter(region == "NE"), aes(x = degree, y = income)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Income vs. Degree (North East)", x = "Degree Percentage", y = "Income") 
+
+# North Central Region
+ggplot(cdi_data %>% filter(region == "NC"), aes(x = degree, y = income)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Income vs. Degree (North Central)", x = "Degree Percentage", y = "Income") 
+
+# South Region
+ggplot(cdi_data %>% filter(region == "S"), aes(x = degree, y = income)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Income vs. Degree (South)", x = "Degree Percentage", y = "Income") 
+
+# West Region
+ggplot(cdi_data %>% filter(region == "W"), aes(x = degree, y = income)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Income vs. Degree (West)", x = "Degree Percentage", y = "Income") 
+
+```
+
+```{r}
+# Variance and R² for each model
+
+summary_NE <- summary(model_NE)
+summary_NC <- summary(model_NC)
+summary_S <- summary(model_S)
+summary_W <- summary(model_W)
+
+# Extract σ² and R²
+sigma_NE <- summary_NE$sigma^2
+sigma_NC <- summary_NC$sigma^2
+sigma_S <- summary_S$sigma^2
+sigma_W <- summary_W$sigma^2
+
+R2_NE <- summary_NE$r.squared
+R2_NC <- summary_NC$r.squared
+R2_S <- summary_S$r.squared
+R2_W <- summary_W$r.squared
+
+print(sigma_NE)
+print(sigma_NC)
+print(sigma_S)
+print(sigma_W)
+
+```
+
+```{r}
+# residuals vs. fitted value
+plot(model_NE, which = 1, main = "Residuals vs Fitted Values (North East)")
+
+# Histogram of residuals 
+hist(residuals(model_NE), main = "Histogram of Residuals (North East)", xlab = "Residuals")
+
+# Q-Q plot
+plot(model_NE, which = 2, main = "Normal Q-Q Plot (North East)")
+
+# Shapiro-Wilk test 
+shapiro_test <- shapiro.test(residuals(model_NE))
+print(shapiro_test)
+
+library(car)
+library(lmtest)
+
+# Durbin-Watson test 
+dw_test <- durbinWatsonTest(model_NE)
+print(dw_test)
+
+# Breusch-Pagan test
+bp_test <- bptest(model_NE)
+print(bp_test)
+```
+
+```{r}
+# coefficients of the final model
+summary(model_NE)$coefficients
+
+# confidence intervals for the coefficients
+confint(model_NE)
+
+# Summary of the model 
+summary(model_NE)
+```
+
+```{r, ref.label=knitr::all_labels(), eval = F, echo = T}
+
+```
+
+
+
