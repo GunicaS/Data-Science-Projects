@@ -1,0 +1,184 @@
+---
+title: "Regional Analysis of Hospital Length of Stay"
+author: "Gunica Sharma"
+date: "2025-02-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(car)
+library(pwr)
+library(fun)
+```
+
+```{r Data Import}
+senic_data<- read.csv("~/Downloads/senic (2).csv")
+```
+
+```{r Summary of data}
+# Summary of the data
+group.means <- tapply(senic_data$Length,senic_data$Region,mean)
+group.sds <- tapply(senic_data$Length,senic_data$Region,sd)
+group.nis <- tapply(senic_data$Length,senic_data$Region, length)
+
+total.mean <- mean(senic_data$Length)
+total.sd <- sd(senic_data$Length)
+total.n <- length(senic_data$Length)
+
+group.means <- c(group.means, Total = total.mean)
+group.sds <- c(group.sds, Total = total.sd)
+group.nis <- c(group.nis, Total = total.n)
+
+the.summary = rbind(group.means,group.sds,group.nis)
+the.summary = round(the.summary,digits = 4)
+colnames(the.summary) = names(group.means)
+rownames(the.summary) = c("Means","Std. Dev","Sample Size")
+the.summary
+```
+
+```{r Summary of data (Histogram)}
+# Histogram of Length of Stay by Region
+histogram1 <- hist(senic_data$Length,
+                   main="Histogram of Hospital Stay Length",
+                   xlab="Length of Stay (days)",
+                   col ="blue")
+```
+```{r Summary of data (Boxplot)}
+# Boxplot of Length of Stay by Region
+ggplot(senic_data, aes(x = Length, y = Region)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Length of Stay by Region",
+       x = "Length of Stay") +
+  theme_minimal()
+```
+
+```{r Diagnostics (Outliers)}
+# Identifying the outliers
+the.model = lm(Length ~ Region, data = senic_data)
+ei = the.model$residuals
+nt = nrow(senic_data) # Calculates the total sample size
+a = length(unique(senic_data$Region)) # Calculates the number of groups
+SSE = sum(ei^2) # Sums squared errors (finds SSE)
+MSE = SSE / (nt - a) # Finds MSE
+eij.star = the.model$residuals / sqrt(MSE)
+
+alpha = 0.05
+t.cutoff = qt(1 - alpha / (2 * nt), df = nt - a) # Finds t-distribution cutoff
+CO.eij = which(abs(eij.star) > t.cutoff) # Identifies outlier
+CO.eij
+
+
+outliers = CO.eij  # Store outliers indices
+senic_data_clean = senic_data[-outliers, ]  # Remove outlier from original dataset
+the.model_clean = lm(Length ~ Region, data = senic_data_clean) # New dataset
+```
+
+```{r Diagnostics (Test normality)}
+# QQ Plot
+the.model_clean = lm(Length ~ Region, data = senic_data_clean)  # New model
+ei_clean = the.model_clean$residuals  # Get residuals
+
+qqnorm(ei_clean)  # Create QQ plot
+qqline(ei_clean)  # Add reference line
+
+# Shapiro-Wilks (SW) Test
+aov.lm <- aov(Length ~ Region, data=senic_data_clean)
+ei = aov.lm$residuals
+the.SWtest = shapiro.test(ei)
+the.SWtest
+```
+
+```{r Diagnostics (Test Constant Variance)}
+# Plotting errors vs. groups
+plot(aov.lm$fitted.values, aov.lm$residuals, main = "Errors vs. Groups",xlab = "Groups",ylab = "Errors")
+
+# Assessing constant variance (Brown-Forsythe Test)
+senic_data_clean$Region <- as.factor(senic_data_clean$Region)
+the.BFtest = leveneTest(Length ~ Region, data = senic_data_clean, center = "median")
+
+p.val = the.BFtest[[3]][1]
+p.val
+```
+
+```{r Analysis (ANOVA)}
+the.model.clean = lm(Length ~ Region, data = senic_data_clean)
+anova.table = anova(the.model.clean)
+anova.table
+```
+
+```{r Analysis (Power Calculations)}
+give.me.power = function(ybar,ni,MSE,alpha){
+  a = length(ybar) # Finds a
+  nt = sum(ni) #Finds the overall sample size
+  overall.mean = sum(ni*ybar)/nt # Finds the overall mean
+  phi = (1/sqrt(MSE))*sqrt( sum(ni*(ybar - overall.mean)^2)/a) #Finds the books value of phi
+  phi.star = a *phi^2 #Finds the value of phi we will use for R 
+  Fc = qf(1-alpha,a-1,nt-a) #The critical value of F, use in R's function
+  power = 1 - pf(Fc, a-1, nt-a, phi.star)# The power, calculated using a non-central F
+  return(power)
+}
+
+new.group.means <- tapply(senic_data_clean$Length,senic_data_clean$Region,mean)
+new.group.nis <- tapply(senic_data_clean$Length,senic_data_clean$Region,length)
+the.model_clean = lm(Length ~ Region, data = senic_data_clean)
+anova.table = anova(the.model_clean)
+MSE = anova.table[2,3]
+
+the.power = give.me.power(new.group.means,new.group.nis,MSE,0.05)
+overall.mean = sum(new.group.means*new.group.nis)/sum(new.group.nis)
+effect.size = sqrt(sum(new.group.nis/sum(new.group.nis)*(new.group.means-overall.mean)^2 )/MSE)
+
+pwr.anova.test(k = 3, f = effect.size, sig.level = 0.01, power = 0.9)
+```
+
+```{r Analysis (Confidence Interval)}
+give.me.CI = function(ybar, ni, ci, MSE, multiplier){
+  if(sum(ci) != 0 & sum(ci != 0) != 1){
+    return("Error - you did not input a valid contrast")
+  } else if(length(ci) != length(ni)){
+    return("Error - not enough contrasts given")
+  } else{
+    estimate = sum(ybar * ci)
+    SE = sqrt(MSE * sum(ci^2 / ni))
+    CI = estimate + c(-1, 1) * multiplier * SE
+    result = c(estimate, CI)
+    names(result) = c("Estimate", "Lower Bound", "Upper Bound")
+    return(result)
+  }
+}
+
+senic_data_clean$Region <- as.factor(senic_data_clean$Region)
+new.group.means <- tapply(senic_data_clean$Length, senic_data_clean$Region, mean)
+new.group.nis <- tapply(senic_data_clean$Length, senic_data_clean$Region, length)
+model <- lm(Length ~ Region, data = senic_data_clean)
+anova.table <- anova(model)
+MSE <- anova.table[2, "Mean Sq"]
+df <- sum(new.group.nis) - length(new.group.nis)
+t.value <- qt(1 - 0.05/2, df = df)
+
+new.group.means
+
+ci.1 = c(1, -1, 0, 0)
+ci.2 = c(1, 0, -1, 0)
+ci.3 = c(1, 0, 0, -1)
+ci.4 = c(0, 1, -1, 0)
+ci.5 = c(0, 1, 0, -1)
+ci.6 = c(0, 0, 1, -1)
+
+CI_1_2 <- give.me.CI(new.group.means, new.group.nis, ci.1 , MSE, t.value)
+CI_1_3 <- give.me.CI(new.group.means, new.group.nis, ci.2, MSE, t.value)
+CI_1_4 <- give.me.CI(new.group.means, new.group.nis, ci.3, MSE, t.value)
+CI_2_3 <- give.me.CI(new.group.means, new.group.nis, ci.4, MSE, t.value)
+CI_2_4 <- give.me.CI(new.group.means, new.group.nis, ci.5, MSE, t.value)
+CI_3_4 <- give.me.CI(new.group.means, new.group.nis, ci.6, MSE, t.value)
+
+CI_1_2
+CI_1_3
+CI_1_4
+CI_2_3
+CI_2_4
+CI_3_4
+```
