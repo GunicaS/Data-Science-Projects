@@ -1,0 +1,374 @@
+---
+title: "Helicopter and Emergency Patterns Analysis"
+author: "Gunica Sharma"
+date: "2025-03-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+#Part I: Transformation of Variables
+
+#III Model Fit and Diagnostics
+
+#ANOVA model fit
+helicopter <- read.csv("C:/Users/vs24/Downloads/Helicopter.csv")
+the.model = lm(Count ~ Shift, data = helicopter)
+anova.table = anova(the.model)
+anova.table
+
+#QQ Plot & Shapiro Wilks
+qqnorm(the.model$residuals)
+qqline(the.model$residuals)
+
+ei = the.model$residuals
+the.SWtest = shapiro.test(ei)
+the.SWtest
+
+#Errors vs Groups Plot & Brown-Forsythe Test
+plot(the.model$fitted.values, the.model$residuals, main = "Errors vs. Group Means",xlab = "Group Means") 
+abline(h = 0,col = "purple")
+
+boxplot(ei ~ Shift, data = helicopter)
+
+library(car)
+the.BFtest = leveneTest(ei~ Shift, data=helicopter, center=median)
+p.val = the.BFtest[[3]][1]
+p.val
+
+#Outliers
+nt = nrow(helicopter) #Calculates the total sample size
+a = length(unique(helicopter$Shift)) #Calculates the value of a
+SSE = sum(the.model$residuals^2) #Sums and squares the errors (finds SSE)
+MSE = SSE/(nt-a) #Finds MSE
+eij.star = the.model$residuals/sqrt(MSE)
+
+alpha = 0.05
+t.cutoff= qt(1-alpha/(2*nt), nt-a)
+CO.eij = which(abs(eij.star) > t.cutoff)
+CO.eij
+
+rij = rstandard(the.model)
+CO.rij = which(abs(rij) > t.cutoff)
+CO.rij
+
+#remove outliers
+outliers = CO.rij
+new.data = helicopter[-outliers,]
+new.model = lm(Count ~ Shift,data = new.data)
+```
+
+```{r}
+
+#Outlier Data Transformation
+#Shapiro-Wilks
+boxcox(the.model ,objective.name = "Shapiro-Wilk")
+
+L2 = boxcox(the.model ,objective.name = "Shapiro-Wilk",optimize = TRUE)$lambda
+
+
+#Outlier Data with Shapiro Wilk
+Y_SW_O = (helicopter$Count^(L2)-1)/L2
+o_sw.data = data.frame(Count = Y_SW_O, Shift = helicopter$Shift)
+o_sw.model = lm(Count ~ Shift,data = o_sw.data)
+
+anova.table = anova(o_sw.model)
+anova.table
+
+qqnorm(o_sw.model$residuals)
+qqline(o_sw.model$residuals)
+
+eisw = o_sw.model$residuals
+the.SWtest = shapiro.test(eisw)
+the.SWtest
+
+plot(o_sw.model$fitted.values, o_sw.model$residuals, main = "Errors vs. Group Means",xlab = "Group Means") 
+abline(h = 0,col = "purple")
+
+library(car)
+the.BFtest = leveneTest(eiqq~ Shift, data=o_sw.data, center=median)
+p.val = the.BFtest[[3]][1]
+p.val
+```
+
+
+```{r}
+
+#IV Data Transformations & Outlier Handling
+
+library(EnvStats)
+#Shapiro-Wilks
+boxcox(new.model ,objective.name = "Shapiro-Wilk")
+L2 = boxcox(new.model ,objective.name = "Shapiro-Wilk",optimize = TRUE)$lambda
+
+#Transformed Data with Shapiro Wilk
+Y_SW = (new.data$Count^(L2)-1)/L2
+t_sw.data = data.frame(Count = Y_SW, Shift = new.data$Shift)
+t_sw.model = lm(Count ~ Shift,data = t_sw.data)
+
+anova.table = anova(t_sw.model)
+anova.table
+
+qqnorm(t_sw.model$residuals)
+qqline(t_sw.model$residuals)
+
+eisw = t_sw.model$residuals
+the.SWtest = shapiro.test(eisw)
+the.SWtest
+
+plot(t_sw.model$fitted.values, t_sw.model$residuals, main = "Errors vs. Group Means",xlab = "Group Means") 
+abline(h = 0,col = "purple")
+
+library(car)
+the.BFtest = leveneTest(eiqq~ Shift, data=t_sw.data, center=median)
+p.val = the.BFtest[[3]][1]
+p.val
+```
+
+```{r}
+# mean
+aggregate(Annual~Prof+Region,
+          data = salary, 
+          FUN = mean
+          )
+# SD
+aggregate(Annual~Prof+Region,
+          data = salary, 
+          FUN = sd
+          )
+# Group Length
+aggregate(Annual~Prof+Region,
+          data = salary, 
+          FUN = length
+          )
+
+# Boxplot
+ggplot(salary, aes(x = Region , y = Annual, fill = Prof)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Annual Salary by P",
+       x = "Region",
+       y = "Annual Salary") +
+  theme_minimal()
+
+# Interaction Plot
+with(
+  salary,
+  interaction.plot(Prof, Region, Annual)
+)
+
+# Barplots
+library(Rmisc)
+# compute mean and standard error of the mean by subgroup
+summary_stat <- summarySE(salary,
+  measurevar = "Annual",
+  groupvars = c("Prof", "Region")
+)
+ggplot(
+  subset(summary_stat, !is.na(Region)), # remove NA level for sex
+  aes(x = Prof, y = Annual, fill = Region)
+) +
+  geom_bar(position = position_dodge(), stat = "identity") +
+  geom_errorbar(aes(ymin = Annual - se, ymax = Annual + se), # add error bars
+    width = 0.25, # width of error bars
+    position = position_dodge(.9)
+  ) +
+  labs(y = "Mean of Annual Salary")
+
+Diagnostics:
+AB = lm(Annual ~ Prof * Region, data = Salary)
+A.B = lm(Annual ~ Prof + Region, data = Salary)
+A = lm(Annual ~ Prof, data = Salary)
+B = lm(Annual ~ Region, data = Salary)
+
+Partial.R2 = function(small.model,big.model){ 
+  SSE1 = sum(small.model$residuals^2)
+  SSE2 = sum(big.model$residuals^2)
+  PR2 = (SSE1 - SSE2)/SSE1
+  return(PR2) 
+}
+
+Partial.R2(A.B, AB)
+Partial.R2(B, A.B)
+Partial.R2(A, A.B)
+
+anova(A.B, AB)
+anova(B,AB)
+anova(A,AB)
+
+anova.results = anova(AB)
+
+knitr::kable(anova.results, caption = "Anova Results")
+
+the.model = A.B
+
+a = length(unique(Salary$Prof))
+b = length(unique(Salary$Region))
+alpha = 0.05
+nt = length(Salary$Annual)
+
+t.cutoff = qt(1-alpha/(2*nt), nt - a - b + 1)
+rij = rstandard(the.model)
+CO.rij = which(abs(rij) > t.cutoff)
+outliers = CO.rij
+outliers
+
+model.fit <- aov(Annual ~ Prof + Region,
+  data = salary
+)
+
+library(car)
+
+plot(model.fit,which = 2)
+
+shapiro.test(model.fit$residuals)
+
+plot(model.fit, which = 3)
+
+leveneTest(Annual~Prof*Region, data = salary)
+
+Analysis: 
+find.mult = function(alpha,a,b,dfSSE,g,group){ 
+  if(group == "A"){
+    Tuk = round(qtukey(1-alpha,a,dfSSE)/sqrt(2),3)
+    Bon = round(qt(1-alpha/(2*g), dfSSE ) ,3)
+    Sch = round(sqrt((a-1)*qf(1-alpha, a-1, dfSSE)),3)
+    }
+  else if(group == "B"){
+    Tuk = round(qtukey(1-alpha,b,dfSSE)/sqrt(2),3)
+    Bon = round(qt(1-alpha/(2*g), dfSSE ) ,3)
+    Sch = round(sqrt((b-1)*qf(1-alpha, b-1, dfSSE)),3)
+    }
+  else if(group == "AB"){
+    Tuk = round(qtukey(1-alpha,a*b,dfSSE)/sqrt(2),3)
+    Bon = round(qt(1-alpha/(2*g), dfSSE ) ,3)
+    Sch = round(sqrt((a*b-1)*qf(1-alpha, a*b-1, dfSSE)),3)
+    }
+results = c(Bon, Tuk,Sch)
+names(results) = c("Bonferroni","Tukey","Scheffe") 
+return(results)
+}
+
+all.multi = find.mult(alpha = 0.05, a = 3, b = 2, dfSSE = nt - 3 - 2 + 1, g = 6, group = "AB")
+Bon = all.multi[1]
+
+find.means = function(the.data,fun.name = mean){
+  a = length(unique(the.data[,2]))
+  b = length(unique(the.data[,3]))
+  means.A = by(the.data[,1], the.data[,2], fun.name)
+  means.B = by(the.data[,1],the.data[,3],fun.name)
+  means.AB = by(the.data[,1],list(the.data[,2],the.data[,3]),fun.name) 
+  MAB = matrix(means.AB,nrow = b, ncol = a, byrow = TRUE) 
+  colnames(MAB) = names(means.A)
+  rownames(MAB) = names(means.B) 
+  MA = as.numeric(means.A) 
+  names(MA) = names(means.A)
+  MB = as.numeric(means.B) 
+  names(MB) = names(means.B)
+  MAB = t(MAB)
+  results = list(A = MA, B = MB, AB = MAB) 
+return(results)
+}
+
+the.means = find.means(Salary)
+SSE = sum(the.model$residuals^2)
+MSE = SSE/(nt - a - b + 1)
+
+scary.CI = function(the.data,MSE,equal.weights = TRUE,multiplier,group,cs){
+  if(sum(cs) != 0 & sum(cs !=0 ) != 1){
+    return("Error - you did not input a valid contrast")
+}else{
+    the.means = find.means(the.data) 
+    the.ns =find.means(the.data,length) 
+    nt = nrow(the.data)
+    a = length(unique(the.data[,2]))
+    b = length(unique(the.data[,3])) 
+    if(group =="A"){
+      if(equal.weights == TRUE){
+        a.means = rowMeans(the.means$AB)
+        est = sum(a.means*cs)
+        mul = rowSums(1/the.ns$AB)
+        SE = sqrt(MSE/b^2 * (sum(cs^2*mul)))
+        N = names(a.means)[cs!=0]
+        CS = paste("(",cs[cs!=0],")",sep = "")
+        fancy = paste(paste(CS,N,sep =""),collapse = "+") 
+        names(est) = fancy
+} else{
+  a.means = the.means$A
+  est = sum(a.means*cs)
+  SE = sqrt(MSE*sum(cs^2*(1/the.ns$A)))
+  N = names(a.means)[cs!=0]
+  CS = paste("(",cs[cs!=0],")",sep = "")
+  fancy = paste(paste(CS,N,sep =""),collapse = "+") 
+  names(est) = fancy
+}
+}else if(group == "B"){
+  if(equal.weights == TRUE){
+    b.means = colMeans(the.means$AB)
+    est = sum(b.means*cs)
+    mul = colSums(1/the.ns$AB)
+    SE = sqrt(MSE/a^2 * (sum(cs^2*mul)))
+    N = names(b.means)[cs!=0]
+    CS = paste("(",cs[cs!=0],")",sep = "")
+    fancy = paste(paste(CS,N,sep =""),collapse = "+") 
+    names(est) = fancy
+} else{
+  b.means = the.means$B
+  est = sum(b.means*cs)
+  SE = sqrt(MSE*sum(cs^2*(1/the.ns$B)))
+  N = names(b.means)[cs!=0]
+  CS = paste("(",cs[cs!=0],")",sep = "")
+  fancy = paste(paste(CS,N,sep =""),collapse = "+") 
+  names(est) = fancy
+  }
+} else if(group == "AB"){
+  est = sum(cs*the.means$AB)
+  SE = sqrt(MSE*sum(cs^2/the.ns$AB)) 
+  names(est) = "someAB"
+}
+the.CI = est + c(-1,1)*multiplier*SE
+results = c(est,the.CI)
+names(results) = c(names(est),"lower bound","upper bound") 
+return(results)
+}
+}
+
+# Pairwise between Bioinformatics in Seattle vs. San Francisco
+A.B.cs.1 = matrix(0, nrow = a, ncol = b)
+the.means$AB
+A.B.cs.1[1,1] = 1
+A.B.cs.1[1,2] = -1
+scary.CI(Salary, MSE, equal.weights = TRUE, Bon, "AB", A.B.cs.1)
+
+# Pairwise between Data Science in Seattle vs. San Francisco
+A.B.cs.2 = matrix(0, nrow = a, ncol = b)
+A.B.cs.2[2,1] = 1
+A.B.cs.2[2,2] = -1
+scary.CI(Salary, MSE, equal.weights = TRUE, Bon, "AB", A.B.cs.2)
+
+# Pairwise between Software in Seattle vs. San Francisco
+A.B.cs.3 = matrix(0, nrow = a, ncol = b)
+A.B.cs.3[3,1] = 1
+A.B.cs.3[3,2] = -1
+scary.CI(Salary, MSE, equal.weights = TRUE, Bon, "AB", A.B.cs.3)
+
+# Pairwise between Seattle and San Francisco
+A.B.cs.4 = c(1, -1)
+scary.CI(Salary, MSE, equal.weights = TRUE, Bon, "B", A.B.cs.4)
+
+# Contrast between DS Seattle and average of BE and SE Seattle
+A.B.cs.5 = matrix(0, nrow = a, ncol = b)
+A.B.cs.5[2,1] = -1/2
+A.B.cs.5[1,1] = -1/2
+A.B.cs.5[3,1] = 1
+scary.CI(Salary, MSE, equal.weights = TRUE, Bon, "AB", A.B.cs.5)
+
+# Contrast between SD SF and average between BE and SE SF
+A.B.cs.6 = matrix(0, nrow = a, ncol = b)
+A.B.cs.6[2,2] = -1/2
+A.B.cs.6[1,2] = -1/2
+A.B.cs.6[3,2] = 1
+scary.CI(Salary, MSE, equal.weights = TRUE, Bon, "AB", A.B.cs.6)
+
+
+```
+
+
